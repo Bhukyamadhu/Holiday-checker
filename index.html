@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Public Holidays Checker</title>
+<style>
+* { box-sizing: border-box; margin:0; padding:0; font-family:'Arial', sans-serif; }
+body { background:#f5f5f5; color:#333; }
+.container { max-width:800px; margin:50px auto; padding:20px; background:#fff; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
+h1 { text-align:center; margin-bottom:30px; color:#0077cc; }
+.controls { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:20px; }
+.controls select, .controls input { padding:10px; font-size:16px; border-radius:5px; border:1px solid #ccc; min-width:150px; }
+.controls button { padding:10px 20px; font-size:16px; background:#0077cc; color:#fff; border:none; border-radius:5px; cursor:pointer; transition:0.3s; }
+.controls button:hover { background:#005fa3; }
+#holidaysContainer { display:flex; flex-direction:column; gap:10px; }
+.holiday-card { padding:15px; background:#e3f2fd; border-radius:5px; opacity:0; animation: fadeIn 0.5s forwards; }
+.holiday-card.upcoming { background:#ffe082; }
+.loader { border:6px solid #f3f3f3; border-top:6px solid #0077cc; border-radius:50%; width:40px; height:40px; margin:20px auto; animation: spin 1s linear infinite; }
+.hidden { display:none; }
+@keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+@keyframes fadeIn { to{opacity:1;} }
+@media (max-width:600px) { .controls { flex-direction:column; align-items:stretch; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Public Holidays Checker</h1>
+  <div class="controls">
+    <select id="countrySelect">
+      <option value="">Select Country</option>
+    </select>
+    <input type="number" id="yearInput" placeholder="Enter Year" min="2000" max="2100" value="2025">
+    <button id="checkBtn">Check Holidays</button>
+  </div>
+  <div id="loader" class="loader hidden"></div>
+  <div id="holidaysContainer"></div>
+</div>
+
+<script>
+const countrySelect = document.getElementById('countrySelect');
+const yearInput = document.getElementById('yearInput');
+const checkBtn = document.getElementById('checkBtn');
+const holidaysContainer = document.getElementById('holidaysContainer');
+const loader = document.getElementById('loader');
+
+// Hardcoded India Holidays (Example for 2025)
+const indiaHolidays = [
+  { date: "2025-01-26", localName: "Republic Day", name: "Republic Day" },
+  { date: "2025-08-15", localName: "Independence Day", name: "Independence Day" },
+  { date: "2025-10-02", localName: "Gandhi Jayanti", name: "Gandhi Jayanti" },
+  { date: "2025-12-25", localName: "Christmas Day", name: "Christmas Day" }
+];
+
+// Load countries
+async function loadCountries(){
+    try{
+        const res = await fetch('https://date.nager.at/Api/v3/AvailableCountries');
+        const countries = await res.json();
+        countries.push({ countryCode: "IN", name: "India" }); // Add India manually
+        countries.sort((a,b)=>a.name.localeCompare(b.name));
+        countries.forEach(country=>{
+            const option = document.createElement('option');
+            option.value = country.countryCode;
+            option.textContent = country.name;
+            countrySelect.appendChild(option);
+        });
+    }catch(err){
+        alert('Failed to load countries. Try again later.');
+    }
+}
+
+loadCountries();
+
+checkBtn.addEventListener('click', async ()=>{
+    const countryCode = countrySelect.value;
+    const year = yearInput.value;
+    holidaysContainer.innerHTML = '';
+    if(!countryCode || !year){ alert('Please select a country and enter a year.'); return; }
+    loader.classList.remove('hidden');
+    
+    try{
+        let holidays = [];
+        if(countryCode === "IN"){
+            holidays = indiaHolidays.filter(h=>new Date(h.date).getFullYear() == year);
+        } else {
+            const res = await fetch(`https://date.nager.at/Api/v3/PublicHolidays/${year}/${countryCode}`);
+            if(!res.ok) throw new Error('No holidays found');
+            holidays = await res.json();
+        }
+
+        if(holidays.length===0){
+            holidaysContainer.innerHTML='<p>No holidays found for this year.</p>';
+            loader.classList.add('hidden'); return;
+        }
+
+        const today = new Date();
+        let nextHolidayFound = false;
+
+        holidays.forEach(holiday=>{
+            const holidayDate = new Date(holiday.date);
+            const card = document.createElement('div');
+            card.classList.add('holiday-card');
+            if(!nextHolidayFound && holidayDate >= today){
+                card.classList.add('upcoming');
+                nextHolidayFound = true;
+            }
+            card.innerHTML = `<strong>${holiday.date}</strong> - ${holiday.localName} (${holiday.name})`;
+            holidaysContainer.appendChild(card);
+        });
+
+    }catch(err){
+        holidaysContainer.innerHTML=`<p>Error fetching holidays: ${err.message}</p>`;
+    }finally{ loader.classList.add('hidden'); }
+});
+</script>
+</body>
+</html>
